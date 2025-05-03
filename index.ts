@@ -2,6 +2,7 @@ import { createInterface } from "readline";
 import axios from "axios";
 import chalk from "chalk";
 import fs from "fs";
+import { JSDOM } from "jsdom";
 
 const saveValidUsername = (username: string) => {
     fs.appendFileSync("./output/valid.csv", `${username}\n`);
@@ -83,19 +84,38 @@ const getUserInput = async (prompt: string): Promise<string> => {
     });
 };
 
+const getCsrfToken = async (): Promise<string> => {
+    const response = await axios.get("https://www.roblox.com", {
+        headers: {
+            'accept': 'text/html',
+        }
+    });
+
+    const dom = new JSDOM(response.data);
+    const token = dom.window.document.querySelector('meta[name="csrf-token"]')?.getAttribute('data-token');
+
+    if (!token) {
+        throw new Error("CSRF token not found");
+    }
+
+    return token;
+};
 (async () => {
+    const csrfToken = await getCsrfToken();
+    console.log(chalk.green(`CSRF token: ${csrfToken}`));
     const letterLength = await getUserInput("Enter the length of the username: ");
     console.log(chalk.blue("Starting bruteforce username validator..."));
     while (true) {
         try {
             const username = randomizeUsername(parseInt(letterLength));
+            
             if (isUsernameProcessed(username)) {
                 console.log(chalk.yellow(`${username} was already processed, skipping...`));
                 continue;
             }
 
             const birth = randomizeBirthDate();
-            const result = await usernameValidator(username, birth, "FP9BjB+0R3CX");
+            const result = await usernameValidator(username, birth, csrfToken);
             if(!result) {
                 await delay(1000);
                 continue;
